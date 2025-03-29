@@ -33,38 +33,83 @@ public class LevelGenerator : MonoBehaviour
         StringBuilder cleanText = new StringBuilder();
         List<bool> boldFlags = new List<bool>();
 
-        // First parse the text to detect bold regions and remove tags
+        // Parse text and remove tags (existing code remains the same)
         for (int i = 0; i < text.Length; )
         {
-            if (i + 2 < text.Length && text[i] == '<')
+            if (i + 2 < text.Length && text[i] == '<' && text[i+1] == 'b' && text[i+2] == '>')
             {
                 insideBoldTag = true;
-                i += 3; // Skip past <b>
+                i += 3;
                 continue;
             }
-            else if (i + 3 < text.Length && text[i+3] == '>')
+            else if (i + 3 < text.Length && text[i] == '<' && text[i+1] == '/' && text[i+2] == 'b' && text[i+3] == '>')
             {
                 insideBoldTag = false;
-                i += 4; // Skip past </b>
+                i += 4;
                 continue;
             }
 
-            // Only process non-tag characters
             char c = text[i];
             cleanText.Append(c);
             boldFlags.Add(insideBoldTag);
             i++;
         }
 
-        // Now create letter boxes with proper bold flags
         string processedText = cleanText.ToString();
+        
+        // Create first word container
+        GameObject currentWordContainer = CreateWordContainer();
+        float currentLineWidth = 0f;
+        float maxWidth = gridContainer.GetComponent<RectTransform>().rect.width;
+        float letterWidth = letterBoxPrefab.GetComponent<LayoutElement>().preferredWidth;
+
         for (int i = 0; i < processedText.Length; i++)
         {
             char c = processedText[i];
-            GameObject newBox = Instantiate(letterBoxPrefab);
+            
+            if (c == ' ')
+            {
+                // Only create new container if current word has letters
+                if (currentWordContainer.transform.childCount > 0)
+                {
+                    currentWordContainer = CreateWordContainer();
+                    currentLineWidth = 0f;
+                }
+                continue;
+            }
+
+            // Check if we need a new line
+            float charWidth = letterWidth + 5f; // Include spacing
+            if (currentLineWidth + charWidth > maxWidth && currentWordContainer.transform.childCount > 0)
+            {
+                currentWordContainer = CreateWordContainer();
+                currentLineWidth = 0f;
+            }
+
+            GameObject newBox = Instantiate(letterBoxPrefab, currentWordContainer.transform);
             SetupLetterBox(newBox, c, boldFlags[i]);
+            currentLineWidth += charWidth;
+            
             yield return new WaitForEndOfFrame();
         }
+    }
+
+    GameObject CreateWordContainer()
+    {
+        GameObject wordContainer = new GameObject("WordContainer");
+        wordContainer.transform.localScale = Vector3.one;
+        wordContainer.transform.SetParent(gridContainer);
+        
+        // Add layout components
+        var hlg = wordContainer.AddComponent<HorizontalLayoutGroup>();
+        hlg.childAlignment = TextAnchor.MiddleCenter;
+        hlg.spacing = 5f;
+        
+        var fitter = wordContainer.AddComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        
+        return wordContainer;
     }
 
     void SetupLetterBox(GameObject box, char character, bool isBold)
